@@ -11,7 +11,6 @@ Here are some example uses of entoverse.
 package main
 
 import(
-	"log"
 	"net/http"
 	"github.com/r7kamura/entoverse"
 )
@@ -27,8 +26,7 @@ func main() {
 	proxy := entoverse.NewProxy(hostConverter)
 
 	// Runs a reverse-proxy server on http://localhost:3000/
-	serverError := http.ListenAndServe("localhost:3000", proxy)
-	log.Fatal(serverError)
+	http.ListenAndServe("localhost:3000", proxy)
 }
 ```
 
@@ -40,7 +38,6 @@ package main
 
 import(
 	"container/ring"
-	"log"
 	"net/http"
 	"sync"
 	"github.com/r7kamura/entoverse"
@@ -71,7 +68,6 @@ func main() {
 
 	// Runs a reverse-proxy server on http://localhost:3000/
 	proxy := entoverse.NewProxy(hostConverter)
-	serverError := http.ListenAndServe(":3000", proxy)
-	log.Fatal(serverError)
+	http.ListenAndServe(":3000", proxy)
 }
 ```

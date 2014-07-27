@@ -36,6 +36,14 @@ func NewProxyWithHostConverter(hostConverter func(string) string) *Proxy {
 	}
 }
 
+// Create a request-based reverse-proxy.
+func NewProxyWithRequestConverter(requestConverter func(*http.Request, *http.Request)) *Proxy {
+	return &Proxy{
+		RequestConverter: requestConverter,
+		Transport: http.DefaultTransport,
+	}
+}
+
 func (proxy *Proxy) ServeHTTP(writer http.ResponseWriter, originalRequest *http.Request) {
 	// Create a new proxy request object by coping the original request.
 	proxyRequest := proxy.copyRequest(originalRequest)

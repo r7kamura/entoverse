@@ -22,55 +22,29 @@ var ignoredHeaderNames = []string{
 
 // Provide host-based proxy server.
 type Proxy struct {
-	HostConverter func(string) string
+	RequestConverter func(originalRequest, proxyRequest *http.Request)
+	Transport http.RoundTripper
 }
 
-// Create a entoverse.Proxy object with a default round tripper.
-func NewProxy(hostConverter func(string) string) *Proxy {
+// Create a host-based reverse-proxy.
+func NewProxyWithHostConverter(hostConverter func(string) string) *Proxy {
 	return &Proxy{
-		HostConverter: hostConverter,
+		RequestConverter: func(originalRequest, proxyRequest *http.Request) {
+			proxyRequest.URL.Host = hostConverter(originalRequest.Host)
+		},
+		Transport: http.DefaultTransport,
 	}
 }
 
-func (proxy *Proxy) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	// Create a http.Request to be sent to an upstream server by shallow-coping.
-	proxyRequest := new(http.Request)
-	*proxyRequest = *request
-	proxyRequest.Proto = "HTTP/1.1"
-	proxyRequest.ProtoMajor = 1
-	proxyRequest.ProtoMinor = 1
-	proxyRequest.Close = false
-	proxyRequest.Header = make(http.Header)
-	proxyRequest.URL.Scheme = "http"
-	proxyRequest.URL.Path = request.URL.Path
-	proxyRequest.URL.Host = proxy.HostConverter(request.Host)
-	if proxyRequest.URL.Host == "" {
-		writer.WriteHeader(http.StatusNotFound)
-		return
-	}
+func (proxy *Proxy) ServeHTTP(writer http.ResponseWriter, originalRequest *http.Request) {
+	// Create a new proxy request object by coping the original request.
+	proxyRequest := proxy.copyRequest(originalRequest)
 
-	// Copy all header fields.
-	for key, values := range request.Header {
-		for _, value := range values {
-			proxyRequest.Header.Add(key, value)
-		}
-	}
-
-	// Remove ignored header fields.
-	for _, headerName := range ignoredHeaderNames {
-		proxyRequest.Header.Del(headerName)
-	}
-
-	// Append this machine's host name into X-Forwarded-For.
-	if requestHost, _, err := net.SplitHostPort(request.RemoteAddr); err == nil {
-		if originalValues, ok := proxyRequest.Header["X-Forwarded-For"]; ok {
-			requestHost = strings.Join(originalValues, ", ") + ", " + requestHost
-		}
-		proxyRequest.Header.Set("X-Forwarded-For", requestHost)
-	}
+	// Convert an original request into another proxy request.
+	proxy.RequestConverter(originalRequest, proxyRequest)
 
 	// Convert a request into a response by using its Transport.
-	response, err := http.DefaultTransport.RoundTrip(proxyRequest)
+	response, err := proxy.Transport.RoundTrip(proxyRequest)
 	if err != nil {
 		log.Printf("ErrorFromProxy: %v", err)
 		writer.WriteHeader(http.StatusInternalServerError)
@@ -92,4 +66,39 @@ func (proxy *Proxy) ServeHTTP(writer http.ResponseWriter, request *http.Request)
 
 	// Copy a response body.
 	io.Copy(writer, response.Body)
+}
+
+// Create a new proxy request with some modifications from an original request.
+func (proxy *Proxy) copyRequest(originalRequest *http.Request) *http.Request {
+	proxyRequest := new(http.Request)
+	*proxyRequest = *originalRequest
+	proxyRequest.Proto = "HTTP/1.1"
+	proxyRequest.ProtoMajor = 1
+	proxyRequest.ProtoMinor = 1
+	proxyRequest.Close = false
+	proxyRequest.Header = make(http.Header)
+	proxyRequest.URL.Scheme = "http"
+	proxyRequest.URL.Path = originalRequest.URL.Path
+
+	// Copy all header fields.
+	for key, values := range originalRequest.Header {
+		for _, value := range values {
+			proxyRequest.Header.Add(key, value)
+		}
+	}
+
+	// Remove ignored header fields.
+	for _, headerName := range ignoredHeaderNames {
+		proxyRequest.Header.Del(headerName)
+	}
+
+	// Append this machine's host name into X-Forwarded-For.
+	if requestHost, _, err := net.SplitHostPort(originalRequest.RemoteAddr); err == nil {
+		if originalValues, ok := proxyRequest.Header["X-Forwarded-For"]; ok {
+			requestHost = strings.Join(originalValues, ", ") + ", " + requestHost
+		}
+		proxyRequest.Header.Set("X-Forwarded-For", requestHost)
+	}
+
+	return proxyRequest
 }

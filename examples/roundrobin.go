@@ -31,6 +31,6 @@ func main() {
 	}
 
 	// Runs a reverse-proxy server on http://localhost:3000/
-	proxy := entoverse.NewProxy(hostConverter)
+	proxy := entoverse.NewProxyWithHostConverter(hostConverter)
 	http.ListenAndServe(":3000", proxy)
 }
